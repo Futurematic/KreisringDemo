@@ -1,19 +1,21 @@
-import React, { useEffect, useState } from "react";
-import KreisAbwicklungAnimated from "./KreisAbwicklungAnimated";
+import KreisringAbwicklung from "./KreisringAbwicklung";
 
 export default function App() {
-  const [werte, setWerte] = useState([0.3, 0.5, 0.8, 1.0, 0.7, 0.2, 0.4, 0.6]);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setWerte((prev) => prev.map(() => Math.random()));
-    }, 2000);
-    return () => clearInterval(interval);
-  }, []);
+  const werte = [3.0, 3.1, 3.3, 2.9, 2.7, 2.8, 3.2, 3.0];
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <KreisAbwicklungAnimated werte={werte} />
+    <div className="min-h-screen flex flex-col justify-center items-center bg-gray-50 p-6">
+      <h1 className="text-2xl font-bold mb-6">Vergleich Wanddicken-Anzeige</h1>
+      <div className="flex gap-8">
+        <div className="flex flex-col items-center">
+          <h2 className="text-lg mb-2">Segmentierte Darstellung</h2>
+          <KreisringAbwicklung werte={werte} variant="segment" />
+        </div>
+        <div className="flex flex-col items-center">
+          <h2 className="text-lg mb-2">Glatte Verlauf-Darstellung</h2>
+          <KreisringAbwicklung werte={werte} variant="smooth" />
+        </div>
+      </div>
     </div>
   );
 }
