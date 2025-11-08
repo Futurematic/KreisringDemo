@@ -1,6 +1,6 @@
 import React from "react";
 
-export default function KreisringAbwicklung({ werte, variant = "segment" }) {
+function KreisringAbwicklung({ werte, variant = "segment" }) {
   const size = 300;
   const center = size / 2;
   const baseRadius = size / 2 - 20;
@@ -9,9 +9,18 @@ export default function KreisringAbwicklung({ werte, variant = "segment" }) {
   const scale = 15;
   const step = (2 * Math.PI) / n;
 
-  // Punkte auf Außen- & Innenkontur
-  const outer = werte.map((wert, i) => {
-    const angle = i * step - Math.PI / 2;
+  // Erweitere das Array zyklisch für geschlossene Kurve
+  const extendedWerte = [
+    werte[n - 1],        // Letzter Wert
+    ...werte,             // Alle Werte
+    werte[0],             // Erster Wert
+    werte[1]              // Zweiter Wert
+  ];
+
+  // Berechne Punkte für äußere Kontur
+  const outerPoints = extendedWerte.map((wert, i) => {
+    const actualIndex = i - 1; // Verschiebe Index wegen dem extra Punkt am Anfang
+    const angle = actualIndex * step - Math.PI / 2;
     const r = baseRadius + (wert - mean) * scale;
     return [
       center + r * Math.cos(angle),
@@ -19,42 +28,75 @@ export default function KreisringAbwicklung({ werte, variant = "segment" }) {
     ];
   });
 
-  const inner = werte.map((wert, i) => {
-    const angle = i * step - Math.PI / 2;
+  // Berechne Punkte für innere Kontur
+  const innerPoints = extendedWerte.map((wert, i) => {
+    const actualIndex = i - 1;
+    const angle = actualIndex * step - Math.PI / 2;
     const r = baseRadius - 20 + (wert - mean) * scale * 0.5;
     return [
       center + r * Math.cos(angle),
       center + r * Math.sin(angle),
     ];
-  }).reverse();
+  });
 
-  // Ersten Punkt ans Ende hängen -> Ring sauber schließen
-  outer.push(outer[0]);
-  inner.push(inner[0]);
-
-  // Hilfsfunktion Bézier
-  const catmullRomToBezier = (points) => {
-    if (points.length < 2) return "";
-    const d = [];
-    for (let i = 0; i < points.length - 1; i++) {
-      const p0 = points[i - 1] || points[points.length - 2];
+  // Catmull-Rom zu Bézier - nur für die n Hauptsegmente
+  const createSmoothPath = (points) => {
+    const segments = [];
+    
+    // Starte bei Index 1 (nach dem extra Punkt) und gehe n Schritte
+    for (let i = 1; i <= n; i++) {
+      const p0 = points[i - 1];
       const p1 = points[i];
       const p2 = points[i + 1];
-      const p3 = points[i + 2] || points[1];
+      const p3 = points[i + 2];
+
+      // Sicherheitscheck
+      if (!p0 || !p1 || !p2 || !p3) continue;
+
       const c1x = p1[0] + (p2[0] - p0[0]) / 6;
       const c1y = p1[1] + (p2[1] - p0[1]) / 6;
       const c2x = p2[0] - (p3[0] - p1[0]) / 6;
       const c2y = p2[1] - (p3[1] - p1[1]) / 6;
-      d.push(`C ${c1x},${c1y} ${c2x},${c2y} ${p2[0]},${p2[1]}`);
+
+      segments.push(`C ${c1x},${c1y} ${c2x},${c2y} ${p2[0]},${p2[1]}`);
     }
-    return `M ${points[0][0]},${points[0][1]} ${d.join(" ")} Z`;
+    
+    return segments;
   };
 
-  // Pfaddaten für Außen- und Innenlinie kombinieren
-  const allPoints = [...outer, ...inner];
-  const pathData = catmullRomToBezier(allPoints);
+  const outerSegments = createSmoothPath(outerPoints);
+  const innerSegments = createSmoothPath(innerPoints);
 
-  // Farbverlauf abhängig von Variante
+  // Kombiniere äußeren und inneren Pfad zu einem geschlossenen Ring
+  const startPoint = outerPoints[1]; // Erster echter Punkt
+  
+  // Äußerer Pfad im Uhrzeigersinn
+  const outerPath = `M ${startPoint[0]},${startPoint[1]} ${outerSegments.join(" ")}`;
+  
+  // Verbindung zum inneren Pfad
+  const connectionToInner = `L ${innerPoints[n + 1][0]},${innerPoints[n + 1][1]}`;
+  
+  // Innerer Pfad gegen den Uhrzeigersinn (reversed)
+  const innerSegmentsReversed = [];
+  for (let i = n; i >= 1; i--) {
+    const p0 = innerPoints[i + 2];
+    const p1 = innerPoints[i + 1];
+    const p2 = innerPoints[i];
+    const p3 = innerPoints[i - 1];
+
+    if (!p0 || !p1 || !p2 || !p3) continue;
+
+    const c1x = p1[0] + (p2[0] - p0[0]) / 6;
+    const c1y = p1[1] + (p2[1] - p0[1]) / 6;
+    const c2x = p2[0] - (p3[0] - p1[0]) / 6;
+    const c2y = p2[1] - (p3[1] - p1[1]) / 6;
+
+    innerSegmentsReversed.push(`C ${c1x},${c1y} ${c2x},${c2y} ${p2[0]},${p2[1]}`);
+  }
+
+  const pathData = `${outerPath} ${connectionToInner} ${innerSegmentsReversed.join(" ")} Z`;
+
+  // Farbverlauf
   const gradientId = `grad-${variant}`;
   const gradientStops =
     variant === "smooth" ? (
@@ -80,10 +122,8 @@ export default function KreisringAbwicklung({ werte, variant = "segment" }) {
         </linearGradient>
       </defs>
 
-      {/* Weißer Innenraum */}
       <circle cx={center} cy={center} r={baseRadius - 30} fill="white" />
 
-      {/* Rohrwand */}
       <path
         d={pathData}
         fill={`url(#${gradientId})`}
@@ -91,7 +131,6 @@ export default function KreisringAbwicklung({ werte, variant = "segment" }) {
         strokeWidth="2"
       />
 
-      {/* Hilfskreis */}
       <circle
         cx={center}
         cy={center}
@@ -101,5 +140,25 @@ export default function KreisringAbwicklung({ werte, variant = "segment" }) {
         strokeDasharray="4 4"
       />
     </svg>
+  );
+}
+
+export default function App() {
+  const werte = [3.0, 3.1, 3.3, 2.9, 2.7, 2.8, 3.2, 3.0];
+
+  return (
+    <div className="min-h-screen flex flex-col justify-center items-center bg-gray-50 p-6">
+      <h1 className="text-2xl font-bold mb-6">Vergleich Wanddicken-Anzeige</h1>
+      <div className="flex gap-8">
+        <div className="flex flex-col items-center">
+          <h2 className="text-lg mb-2">Segmentierte Darstellung</h2>
+          <KreisringAbwicklung werte={werte} variant="segment" />
+        </div>
+        <div className="flex flex-col items-center">
+          <h2 className="text-lg mb-2">Glatte Verlauf-Darstellung</h2>
+          <KreisringAbwicklung werte={werte} variant="smooth" />
+        </div>
+      </div>
+    </div>
   );
 }
